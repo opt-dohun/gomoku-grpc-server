@@ -298,7 +298,7 @@
             if (sseSource) {
                 sseSource.close();
             }
-            sseSource = new EventSource(`@Model.ServerUrl/sse/game/${roomId}`);
+            sseSource = new EventSource(`/Game?handler=Events&roomId=${encodeURIComponent(roomId)}`);
             
             sseSource.onmessage = function(event) {
                 const gameState = JSON.parse(event.data);

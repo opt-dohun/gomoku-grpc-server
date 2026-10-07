@@ -1,0 +1,18 @@
+@page
+@model GomokuClient.Web.Pages.Account.LoginWith2faModel
+@{
+    ViewData["Title"] = "2차 인증";
+}
+<div class="container py-4"><div class="card mx-auto" style="max-width:520px"><div class="card-body">
+    <h1 class="h3">인증 앱 코드 확인</h1>
+    <p>인증 앱에 표시된 6자리 코드를 입력하세요. 코드는 누구에게도 공유하지 마세요.</p>
+    <form method="post">
+        <input type="hidden" asp-for="ReturnUrl" />
+        <input type="hidden" asp-for="RememberMe" />
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <label asp-for="Input.Code" class="form-label">인증 코드</label>
+        <input asp-for="Input.Code" class="form-control" inputmode="numeric" autocomplete="one-time-code" autofocus />
+        <span asp-validation-for="Input.Code" class="text-danger"></span>
+        <button class="btn btn-primary w-100 mt-3" type="submit">확인</button>
+    </form>
+</div></div></div>

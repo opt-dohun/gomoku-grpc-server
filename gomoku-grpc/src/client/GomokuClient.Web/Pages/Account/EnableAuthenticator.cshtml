@@ -1,0 +1,29 @@
+@page
+@model GomokuClient.Web.Pages.Account.EnableAuthenticatorModel
+@{
+    ViewData["Title"] = "인증 앱 설정";
+}
+<div class="container py-4"><div class="card mx-auto" style="max-width:620px"><div class="card-body">
+    <h1 class="h3">인증 앱으로 2차 인증 설정</h1>
+    @if (Model.IsEnabled)
+    {
+        <div class="alert alert-success">2차 인증이 활성화되어 있습니다. 이후 로그인에는 인증 앱 코드가 필요합니다.</div>
+        <p>분실에 대비해 인증 앱을 안전하게 백업하세요. 이 데모에서는 복구 코드 발급 기능을 제공하지 않습니다.</p>
+        <a class="btn btn-primary" asp-page="/Index">게임으로 이동</a>
+    }
+    else
+    {
+        <p>인증 앱(예: Microsoft Authenticator, Google Authenticator)에서 QR 코드를 스캔하고 현재 표시되는 6자리 코드를 입력하세요.</p>
+        <p class="text-danger">QR과 수동 설정 키는 TOTP 비밀값입니다. 다른 사람에게 보여주거나 공유하지 마세요.</p>
+        <div class="text-center mb-3"><img src="@Model.QrCodeDataUri" alt="인증 앱 등록용 QR 코드" width="240" height="240" /></div>
+        <details class="mb-3"><summary>QR을 스캔할 수 없나요?</summary><code>@Model.ManualKey</code></details>
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <label asp-for="Input.Code" class="form-label">인증 앱 코드</label>
+            <input asp-for="Input.Code" class="form-control" inputmode="numeric" autocomplete="one-time-code" autofocus />
+            <span asp-validation-for="Input.Code" class="text-danger"></span>
+            <button class="btn btn-primary w-100 mt-3" type="submit">코드 확인 후 활성화</button>
+        </form>
+    }
+</div></div></div>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

@@ -12,6 +12,19 @@
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark mb-3">
             <div class="container">
                 <a class="navbar-brand" href="/">🎮 gRPC 오목 게임</a>
+                <div class="navbar-nav ms-auto align-items-center">
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <span class="navbar-text text-light me-3">@User.Identity.Name</span>
+                        <a class="nav-link text-light me-2" asp-page="/Account/EnableAuthenticator">2차 인증</a>
+                        <form method="post" asp-page="/Account/Logout"><button class="btn btn-outline-light btn-sm" type="submit">로그아웃</button></form>
+                    }
+                    else
+                    {
+                        <a class="nav-link text-light me-2" asp-page="/Account/Login">로그인</a>
+                        <a class="nav-link text-light" asp-page="/Account/Register">회원가입</a>
+                    }
+                </div>
             </div>
         </nav>
     </header>

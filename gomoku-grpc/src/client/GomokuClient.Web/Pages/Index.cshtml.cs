@@ -1,18 +1,27 @@
+using GomokuClient.Web.Security;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using GomokuClient.Web.Services;
 
 namespace GomokuClient.Web.Pages;
 
-public class IndexModel : PageModel
+[Authorize]
+public class IndexModel : MfaRequiredPageModel
 {
     private readonly GrpcGameClient _gameClient;
     private readonly ILogger<IndexModel> _logger;
+    private readonly AuthDbContext _authDb;
 
-    public IndexModel(GrpcGameClient gameClient, ILogger<IndexModel> logger)
+    public IndexModel(GrpcGameClient gameClient, ILogger<IndexModel> logger, UserManager<IdentityUser> userManager, AuthDbContext authDb)
+        : base(userManager)
     {
         _gameClient = gameClient;
         _logger = logger;
+        _authDb = authDb;
     }
 
     public void OnGet()
@@ -44,7 +53,19 @@ public class IndexModel : PageModel
         try
         {
             var response = await _gameClient.CreateRoomAsync(model.RoomName, model.PlayerName);
-            return new JsonResult(new { 
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            _authDb.GameMemberships.Add(new GameMembership
+            {
+                UserId = userId,
+                RoomId = response.RoomId,
+                PlayerId = response.Creator.PlayerId,
+                PlayerName = model.PlayerName,
+                IsPlayer1 = true
+            });
+            await _authDb.SaveChangesAsync();
+            return new JsonResult(new {
                 success = true, 
                 roomId = response.RoomId,
                 playerId = response.Creator.PlayerId
@@ -64,9 +85,21 @@ public class IndexModel : PageModel
             var response = await _gameClient.JoinRoomAsync(model.RoomId, model.PlayerName);
             if (response != null)
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+                var membership = new GameMembership
+                {
+                    UserId = userId,
+                    RoomId = model.RoomId,
+                    PlayerId = response.Joiner.PlayerId,
+                    PlayerName = model.PlayerName,
+                    IsPlayer1 = response.IsPlayer
+                };
+                _authDb.GameMemberships.Add(membership);
+                await _authDb.SaveChangesAsync();
                 return new JsonResult(new {
                     success = true,
-                    playerId = response.Joiner.PlayerId
+                    playerId = membership.PlayerId
                 });
             }
             return new JsonResult(new { success = false, message = "방 입장에 실패했습니다." });
