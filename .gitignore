@@ -1,3 +1,7 @@
+## Application state and secrets
+**/App_Data/
+**/auth.db*
+
 ## Build results
 [Dd]ebug/
 [Dd]ebugPublic/
