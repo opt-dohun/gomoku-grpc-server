@@ -140,7 +140,13 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Directory.CreateDirectory(_testDirectory);
+        var tokenFile = Path.Combine(_testDirectory, "backend.token");
+        File.WriteAllText(tokenFile, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        builder.UseSetting("BackendAuth:TokenFile", tokenFile);
         builder.UseEnvironment("Development");
+        // Minimal-host startup reads these before ConfigureAppConfiguration on .NET 9.
+        builder.UseSetting("Auth:DatabasePath", Path.Combine(_testDirectory, "auth.db"));
+        builder.UseSetting("Auth:DataProtectionKeysPath", Path.Combine(_testDirectory, "keys"));
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
@@ -153,6 +159,10 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing && Directory.Exists(_testDirectory)) Directory.Delete(_testDirectory, recursive: true);
+        if (disposing && Directory.Exists(_testDirectory))
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.Delete(_testDirectory, recursive: true);
+        }
     }
 }

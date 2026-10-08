@@ -1,8 +1,13 @@
 using GomokuServer.Domain.Services;
 using GomokuServer.Infrastructure;
 using GomokuServer.Services;
+using GomokuServer.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+var tokenFile = builder.Configuration["BackendAuth:TokenFile"];
+if (string.IsNullOrWhiteSpace(tokenFile))
+    throw new InvalidOperationException("BackendAuth:TokenFile 경로가 필요합니다.");
+var serviceAuth = new InternalServiceAuth(File.ReadAllText(tokenFile).Trim());
 
 // 서비스 등록
 builder.Services.AddGrpc();
@@ -26,6 +31,8 @@ builder.WebHost.ConfigureKestrel(options =>
 
 var app = builder.Build();
 
+// gRPC unary 요청과 SSE 스트림을 동일한 웹→게임 서버 인증 경계로 보호한다.
+app.Use((context, next) => serviceAuth.InvokeAsync(context, next));
 app.UseCors();
 app.MapGrpcService<GameService>();
 app.MapGet("/", () => "gRPC 오목 게임 서버가 실행 중입니다.");

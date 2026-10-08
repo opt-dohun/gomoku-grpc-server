@@ -1,5 +1,6 @@
 using Grpc.Net.Client;
 using GomokuGame.Proto;
+using GomokuClient.Web.Security;
 
 namespace GomokuClient.Web.Services;
 
@@ -14,14 +15,10 @@ public class GrpcGameClient : IDisposable
     public string? CurrentRoomId { get; set; }
     public bool IsPlayer1 { get; set; }
 
-    public GrpcGameClient(string serverUrl = "http://localhost:5224")
+    public GrpcGameClient(string serverUrl, string serviceToken)
     {
-        // 개발 환경에서 자체 서명 인증서 허용
-        var handler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        };
-        
+        // 내부 h2c 연결은 Docker 네트워크에 제한한다. 인증서 검증을 우회하지 않는다.
+        var handler = new BackendTokenHandler(serviceToken, new HttpClientHandler { AllowAutoRedirect = false });
         _channel = GrpcChannel.ForAddress(serverUrl, new GrpcChannelOptions
         {
             HttpHandler = handler

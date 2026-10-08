@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.AspNetCore.HttpOverrides;
 using GomokuClient.Web.Security;
 using GomokuClient.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -5,6 +7,30 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+var backendTokenFile = builder.Configuration["BackendAuth:TokenFile"];
+if (string.IsNullOrWhiteSpace(backendTokenFile))
+    throw new InvalidOperationException("BackendAuth:TokenFile 경로가 필요합니다.");
+var backendToken = File.ReadAllText(backendTokenFile).Trim();
+if (backendToken.Length != 64 || !backendToken.All(Uri.IsHexDigit))
+    throw new InvalidOperationException("백엔드 서비스 토큰은 32바이트 난수의 hex 인코딩이어야 합니다.");
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    var knownProxies = builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [];
+    // An empty allowlist disables forwarding; empty trust lists with forwarding enabled trust everyone.
+    options.ForwardedHeaders = knownProxies.Length == 0
+        ? ForwardedHeaders.None
+        : ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+    foreach (var proxy in knownProxies)
+    {
+        if (!IPAddress.TryParse(proxy, out var address))
+            throw new InvalidOperationException("ReverseProxy:KnownProxies entries must be literal IP addresses.");
+        options.KnownProxies.Add(address);
+    }
+});
 
 var databasePath = builder.Configuration["Auth:DatabasePath"] ?? "App_Data/auth.db";
 var resolvedDatabasePath = Path.GetFullPath(databasePath, builder.Environment.ContentRootPath);
@@ -50,12 +76,14 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddRazorPages();
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("game-backend", client =>
+    client.DefaultRequestHeaders.Add(BackendTokenHandler.HeaderName, backendToken))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<GrpcGameClient>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
     var serverUrl = config["GameServerUrl"] ?? "http://localhost:5224";
-    return new GrpcGameClient(serverUrl);
+    return new GrpcGameClient(serverUrl, backendToken);
 });
 builder.Services.AddAntiforgery();
 
@@ -67,6 +95,9 @@ await using (var scope = app.Services.CreateAsyncScope())
     var db = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
     await db.Database.EnsureCreatedAsync();
 }
+
+// Resolve the external scheme before HSTS, HTTPS redirection, and authentication.
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

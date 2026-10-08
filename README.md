@@ -112,14 +112,12 @@ gRPC와 Server-Sent Events (SSE) 기술을 결합하여 가볍고 빠른 실시�
 
 ### 4. 계정 인증과 게임 접근 권한 분리
 
-- **문제**: 요청에 포함된 참가자 ID·닉네임만으로는 요청자의 신원과 방 참여 권한을 확인할 수 없습니다. 계정 인증뿐 아니라 해당 계정이 접근하려는 방의 참가자인지도 검증해야 합니다.
-- **접근**: ASP.NET Core Identity와 TOTP 2차 인증으로 계정 인증을 처리하고, 로그인 계정과 방 참가자 정보를 연결해 게임 접근 권한을 별도로 검사하도록 구성했습니다.
-- **구현**:
-  - **계정 저장**: `AuthDbContext`에서 Identity 계정·로그인 정보를 관리하며, 개발 저장소로 SQLite를 사용합니다.
-  - **2차 인증 등록·로그인**: `AuthenticatorUriBuilder`와 `QrCodeRenderer`로 인증 앱 등록용 QR을 제공합니다. 가입 후 유효한 TOTP 코드를 제출해야 2차 인증이 활성화되며, 이후 로그인은 비밀번호 확인 뒤 `MfaRequiredPageModel`에서 TOTP를 추가 확인합니다. QR은 비밀키 등록 수단이지 로그인 승인 수단은 아닙니다.
-  - **비밀키 보호**: TOTP secret은 Identity 토큰 저장소에 저장하고 ASP.NET Core Data Protection으로 보호합니다.
-  - **참가 권한 확인**: 방 참여 시 로그인 계정과 참가자 ID를 `GameMembership`에 기록합니다. 로비와 게임 핸들러는 로그인 및 2차 인증 활성화를 요구하며, 게임 상태 조회·착수·기권·SSE 구독은 저장된 참가 권한을 확인합니다.
-- **결과 및 범위**: 웹 요청에서 전달된 참가자 ID·닉네임을 권한 증명으로 사용하는 대신, 로그인 계정과 저장된 참가 정보를 기준으로 접근을 판단하도록 변경했습니다. 다만 게임 서버의 gRPC 자체에는 계정 인증·인가가 적용되지 않았으므로, 이 보호 범위는 웹 클라이언트의 접근 경로에 한정됩니다.
+- **문제**:
+  – 초기 API 설계 시 방 ID와 참가자 ID·닉네임을 URL이나 요청 본문으로 전달했습니다. 그러나 클라이언트가 전달한 값은 변경할 수 있으므로, 요청자가 해당 방의 참가자인지, 또 어느 참가자의 권한으로 행동하는지 판단할 경우, 특히 참가자 ID를 그대로 게임 서버 요청에 사용하면 계정 인증과 게임 내 권한 검증의 신뢰성을 보장하기 어려울 것이라고 보았습니다.
+- **접근 및 해결**:
+  – ASP.NET Core Identity와 TOTP 2차 인증으로 로그인 계정을 확인하고, GameMembership에 방 생성·입장 시 게임 서버가 발급한 참가자 ID를 로그인 계정 ID·방 ID와 연결해 저장합니다. 참가자 ID는 브라우저에도 전달되지만, 웹 서버는 클라이언트가 보낸 값을 권한 증명으로 신뢰하지 않습니다. 착수 시 로그인 쿠키의 계정 ID와 요청의 방 ID로 참가 기록을 조회해, 저장된 참가자 ID를 게임 서버로 전달합니다. 게임 서버는 해당 ID가 현재 턴의 참가자인지 검사하며, 로그인 계정과 참가자 간 관계는 웹 서버에서 검사하도록 수정하였습니다.
+  – 웹→게임 서버 gRPC 요청과 SSE 스트림 간에는 서비스 토큰을 적용하여, 게임 서버는 미들웨어에서 토큰을 검증하고, 토큰 파일이 없거나 형식이 잘못되면 거부하도록 구축하였습니다.
+  – 이를 통해 웹을 거치는 요청은 클라이언트가 전달해주는 참가자 정보가 아니라 서버에 저장된 계정–방 참가 관계를 기준으로 처리하도록 개선했습니다
 
 ## 기술 스택
 
@@ -135,13 +133,17 @@ gRPC와 Server-Sent Events (SSE) 기술을 결합하여 가볍고 빠른 실시�
 
 ```bash
 git clone https://github.com/opt-dohun/gomoku-grpc-server.git
-cd gomoku-grpc-server
+cd gomoku-grpc-server/gomoku-grpc
 docker compose up --build -d
 ```
 
-- gRPC 게임 백엔드: `http://localhost:5224`
-- 오목 게임 웹 로비: `http://localhost:5051`
+- gRPC 게임 백엔드: Compose 네트워크 내부의 `gomoku-server:5224`(호스트에 공개하지 않음)
+- 오목 게임 웹 로비: `http://localhost:5051` (로컬 바인딩)
+
+### Azure 배포 준비
+
+Azure 단일 Ubuntu VM 인프라 Terraform 및 공개용 HTTPS Compose 초안은 [Azure 배포 가이드](gomoku-grpc/infra/azure/README.md)에 있습니다. [WSL Docker 로컬 HTTPS 검증](gomoku-grpc/deploy/README.md)은 완료했지만 **Azure 리소스 생성·공인 인증서 발급·외부 접속은 아직 검증하지 않았습니다.**
 
 ## 추후 후속 계획
 
-게임 서버의 gRPC 프로토콜 자체는 사용자 계정을 검증하지 않습니다. Compose 외부 노출은 제한했지만 내부 네트워크에서의 서버 간 인증/인가까지 구현된 것은 아닙니다. 복구 코드, 이메일 확인, 2차 인증 재설정, OTP 재사용 방지, 계정/IP 속도 제한, 감사 로그도 아직 구현되지 않았습니다. DB 초기화는 `EnsureCreated` 방식이며 운영 배포 전에 migration, HTTPS, Data Protection 키 백업·회전 및 운영 구성을 검토해야 합니다. 설계와 보완 항목은 [TOTP 2차 인증 설계 문서](docs/security/totp-qr-mfa-design.md)를 참고하세요.
+게임 서버 gRPC는 웹 백엔드의 서비스 토큰을 검증하지만 사용자 계정·방 참가 권한을 서버에서 직접 확인하지는 않습니다. Compose 외부 노출은 제한했지만 내부 네트워크의 다른 프로세스가 토큰에 접근하지 못하도록 격리하고, 다중 호스트 운영 시 mTLS를 도입해야 합니다. 복구 코드, 이메일 확인, 2차 인증 재설정, OTP 재사용 방지, 계정/IP 속도 제한, 감사 로그도 아직 구현되지 않았습니다. DB 초기화는 `EnsureCreated` 방식이며 운영 배포 전에 migration, HTTPS, Data Protection 키 백업·회전 및 운영 구성을 검토해야 합니다. 설계와 보완 항목은 [TOTP 2차 인증 설계 문서](docs/security/totp-qr-mfa-design.md)를 참고하세요.

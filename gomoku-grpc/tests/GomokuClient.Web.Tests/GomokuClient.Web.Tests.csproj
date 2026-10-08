@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\client\GomokuClient.Web\GomokuClient.Web.csproj" />
+    <ProjectReference Include="..\..\src\server\GomokuServer\GomokuServer.csproj" Aliases="backend" />
   </ItemGroup>
 
   <ItemGroup>

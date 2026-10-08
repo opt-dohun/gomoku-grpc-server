@@ -102,7 +102,7 @@ public class GameModel : MfaRequiredPageModel
             Version = HttpVersion.Version20,
             VersionPolicy = HttpVersionPolicy.RequestVersionExact
         };
-        using var response = await _httpClientFactory.CreateClient().SendAsync(
+        using var response = await _httpClientFactory.CreateClient("game-backend").SendAsync(
             request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode) return StatusCode((int)response.StatusCode);
 
